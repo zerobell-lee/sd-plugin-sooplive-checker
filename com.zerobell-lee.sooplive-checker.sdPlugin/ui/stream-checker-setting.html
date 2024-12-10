@@ -12,7 +12,15 @@
         Learn more about property inspector components at https://sdpi-components.dev/docs/components
     -->
     <sdpi-item label="Streamer">
-        <sdpi-textfield setting="streamer_id" ></sdpi-textfield>        
+        <sdpi-textfield setting="streamer_id" required></sdpi-textfield>        
+    </sdpi-item>
+    <sdpi-item label="Fetch interval (ms). minimual value -> 1000">
+        <sdpi-textfield
+            setting="fetch_interval"
+            pattern="/^[0-9]+"
+            placeholder="5000"
+            >
+        </sdpi-textfield>
     </sdpi-item>
 </body>
 

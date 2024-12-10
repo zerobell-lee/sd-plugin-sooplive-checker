@@ -1,4 +1,4 @@
-import { Action, action, KeyAction, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { Action, action, DidReceiveSettingsEvent, KeyAction, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 import axios from "axios";
 import cookieParser, { Cookie } from "set-cookie-parser";
@@ -11,6 +11,7 @@ import cookieParser, { Cookie } from "set-cookie-parser";
 export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	private timer: NodeJS.Timeout | undefined;
 	private state: number = 0;
+	private fetchInterval: number = 5000;
 	private cookieDict: Cookie[] = Array<Cookie>();
 
 	/**
@@ -19,13 +20,46 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	 * we're setting the title to the "count" that is incremented in {@link IncrementCounter.onKeyDown}.
 	 */
 	override onWillAppear(ev: WillAppearEvent<SoopCheckerSettings>): void | Promise<void> {
+		this.registerSchedule(ev)
+	}
+
+	private registerSchedule(ev: WillAppearEvent<SoopCheckerSettings> | DidReceiveSettingsEvent<SoopCheckerSettings>) {
 		if (!this.timer) {
-			this.timer = setInterval(async () => {
-				if (ev.action.isKey()) {
-					this.state = await this.checkStreaming(ev.payload.settings) === true ? 1 : 0;
-					ev.action.setState(this.state);
+			streamDeck.logger.debug("Fetch interval = " + ev.payload.settings.fetch_interval)
+			if (ev.payload.settings.fetch_interval !== undefined) {
+				try {
+					let fetchInterval = parseInt(ev.payload.settings.fetch_interval)
+					if (fetchInterval < 1000 && fetchInterval > 0) {
+						this.fetchInterval = 1000
+					} else if (fetchInterval >= 1000) {
+						this.fetchInterval = fetchInterval
+					}
+				} catch (error) {
+					streamDeck.logger.warn("Failed to parse Int,", error)
 				}
-			}, 5000);
+
+				this.timer = setInterval(async () => {
+					if (ev.action.isKey()) {
+						this.state = await this.checkStreaming(ev.payload.settings) === true ? 1 : 0;
+						ev.action.setState(this.state);
+					}
+				}, this.fetchInterval);
+			}
+		}
+	}
+
+	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<SoopCheckerSettings>): Promise<void> | void {
+		let newTimeout = this.fetchInterval
+		try {
+			newTimeout = this.safeParseInt(ev.payload.settings.fetch_interval)
+		} catch (error) {
+
+		}
+
+		if (newTimeout !== this.fetchInterval) {
+			clearInterval(this.timer);
+			this.timer = undefined;
+			this.registerSchedule(ev);
 		}
 	}
 
@@ -48,89 +82,54 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	private async checkStreaming(setting: SoopCheckerSettings): Promise<boolean> {
 		// await this.getCookie(setting.my_id, setting.my_password)
 		streamDeck.logger.debug(this.cookieDict)
-		
+
 		const url = "https://live.afreecatv.com/afreeca/player_live_api.php";
 		const data = {
-		  bid: setting.streamer_id,
-		  quality: "original",
-		  type: "aid",
-		  pwd: "",
-		  stream_type: "common",
+			bid: setting.streamer_id,
+			quality: "original",
+			type: "aid",
+			pwd: "",
+			stream_type: "common",
 		};
-	  
+
 		try {
-		  const response = await axios.post(url, new URLSearchParams(data).toString(), {
-			headers: {
-			  "Content-Type": "application/x-www-form-urlencoded",
-			  "Cookie": this.cookieDict.map(cookie => `${cookie.name}=${cookie.value}`).join("; "),  // 쿠키 포함
-			},
-		  });
-	  
-		  const result = response.data;
-	  
-		  if (result.CHANNEL.RESULT === 0) {
-			return false;  // 방송 중 아님
-		  } else if (result.CHANNEL.RESULT === 1) {
-			return true;  // 방송 중
-		  } else {
-			return false;  // 결과를 알 수 없음
-		  }
+			const response = await axios.post(url, new URLSearchParams(data).toString(), {
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					"Cookie": this.cookieDict.map(cookie => `${cookie.name}=${cookie.value}`).join("; "),  // 쿠키 포함
+				},
+			});
+
+			const result = response.data;
+
+			if (result.CHANNEL.RESULT === 0) {
+				return false;  // 방송 중 아님
+			} else if (result.CHANNEL.RESULT === 1) {
+				return true;  // 방송 중
+			} else {
+				return false;  // 결과를 알 수 없음
+			}
 		} catch (error) {
-		  streamDeck.logger.error("Error during stream check:", error);
-		  return false;
+			streamDeck.logger.error("Error during stream check:", error);
+			return false;
 		}
 	}
 
-	private async getCookie(userName?: string, userPassword?: string) {
-		if (this.cookieDict.length > 0) {
-			return;
+	private safeParseInt(str: string | undefined) {
+		if (str === undefined) {
+			throw new Error('Invalid number format');
 		}
-		if (userName === undefined || userPassword === undefined) {
-			return;
+		if (/^\d+$/.test(str)) {
+			return parseInt(str, 10);
+		} else {
+			throw new Error('Invalid number format');
 		}
-		if (userName === "" || userPassword === "") {
-			return;
-		}
-
-		const url = "https://login.afreecatv.com/app/LoginAction.php";
-	  
-		const data = new URLSearchParams({
-		  szWork: "login",
-		  szType: "json",
-		  szUid: userName,
-		  szPassword: userPassword,
-		  isSaveId: "true",
-		  isSavePw: "false",
-		  isSaveJoin: "false",
-		  isLoginRetain: "Y",
-		});
-	  
-		try {
-			// 첫 번째 요청: 로그인 시도
-			const response = await axios.post(url, data, {
-			  headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
-			  },
-			});
-		
-			// 응답 헤더에서 쿠키 파싱
-			const rawCookies = response.headers["set-cookie"];
-			if (rawCookies) {
-			  // set-cookie를 파싱하여 쿠키 딕셔너리에 저장
-			  this.cookieDict = cookieParser.parse(rawCookies);
-			  streamDeck.logger.debug("Cookies:", this.cookieDict);
-			}
-		  } catch (error) {
-			streamDeck.logger.error("Error during login:", error);
-			throw error;
-		  }
-		}
+	}
 }
 
 streamDeck.connect();
 
 type SoopCheckerSettings = {
 	streamer_id: string;
-	my_id: string | undefined;
-	my_password: string | undefined;
+	fetch_interval: string | undefined;
 }
