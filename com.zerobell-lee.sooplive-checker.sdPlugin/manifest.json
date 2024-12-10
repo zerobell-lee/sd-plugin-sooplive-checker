@@ -1,0 +1,51 @@
+{
+	"Name": "sooplive-checker",
+	"Version": "0.1.0.0",
+	"Author": "zerobell-lee",
+	"Actions": [
+		{
+			"Name": "Check streaming",
+			"UUID": "com.zerobell-lee.sooplive-checker.check",
+			"Icon": "imgs/actions/checker/icon",
+			"Tooltip": "Check streaming",
+			"PropertyInspectorPath": "ui/stream-checker-setting.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/plugin/soop-off",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/plugin/soop-on",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	],
+	"Category": "sooplive-checker",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Checker to check the streaming is live on SOOP",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.4"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "10.15"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"UUID": "com.zerobell-lee.sooplive-checker"
+}
