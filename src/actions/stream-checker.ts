@@ -75,6 +75,7 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	 * settings using `setSettings` and `getSettings`.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<SoopCheckerSettings>): Promise<void> {
+		ev.action.setState(this.state)
 		const streamerId = ev.payload.settings.streamer_id
 		streamDeck.system.openUrl("https://play.sooplive.co.kr/" + streamerId);
 	}

@@ -1,5 +1,5 @@
 {
-	"Name": "sooplive-checker",
+	"Name": "SOOP Live Checker",
 	"Version": "0.1.0.0",
 	"Author": "zerobell-lee",
 	"Actions": [
@@ -24,7 +24,7 @@
 			]
 		}
 	],
-	"Category": "sooplive-checker",
+	"Category": "SOOP Live Checker",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
 	"Description": "Checker to check the streaming is live on SOOP",
