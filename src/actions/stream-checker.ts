@@ -1,4 +1,4 @@
-import { Action, action, DidReceiveSettingsEvent, KeyAction, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { Action, action, DidReceiveSettingsEvent, KeyAction, KeyDownEvent, KeyUpEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 import axios from "axios";
 import cookieParser, { Cookie } from "set-cookie-parser";
@@ -80,11 +80,15 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 		streamDeck.system.openUrl("https://play.sooplive.co.kr/" + streamerId);
 	}
 
+	override async onKeyUp(ev: KeyUpEvent<SoopCheckerSettings>): Promise<void> {
+		ev.action.setState(this.state)
+	}
+
 	private async checkStreaming(setting: SoopCheckerSettings): Promise<boolean> {
 		// await this.getCookie(setting.my_id, setting.my_password)
 		streamDeck.logger.debug(this.cookieDict)
 
-		const url = "https://live.afreecatv.com/afreeca/player_live_api.php";
+		const url = "https://live.sooplive.co.kr/afreeca/player_live_api.php";
 		const data = {
 			bid: setting.streamer_id,
 			quality: "original",
