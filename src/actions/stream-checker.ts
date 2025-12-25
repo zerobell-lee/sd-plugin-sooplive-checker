@@ -9,9 +9,9 @@ import cookieParser, { Cookie } from "set-cookie-parser";
  */
 @action({ UUID: "com.zerobell-lee.sooplive-checker.check" })
 export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
-	private timer: NodeJS.Timeout | undefined;
-	private state: number = 0;
-	private fetchInterval: number = 5000;
+	private timers: Map<string, NodeJS.Timeout> = new Map();
+	private states: Map<string, number> = new Map();
+	private fetchIntervals: Map<string, number> = new Map();
 	private cookieDict: Cookie[] = Array<Cookie>();
 
 	/**
@@ -24,48 +24,69 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	}
 
 	private registerSchedule(ev: WillAppearEvent<SoopCheckerSettings> | DidReceiveSettingsEvent<SoopCheckerSettings>) {
-		if (!this.timer) {
+		const context = ev.action.id;
+
+		if (!this.timers.has(context)) {
 			streamDeck.logger.debug("Fetch interval = " + ev.payload.settings.fetch_interval)
 			if (ev.payload.settings.fetch_interval !== undefined) {
+				let fetchInterval = 5000;
 				try {
-					let fetchInterval = parseInt(ev.payload.settings.fetch_interval)
-					if (fetchInterval < 1000 && fetchInterval > 0) {
-						this.fetchInterval = 1000
-					} else if (fetchInterval >= 1000) {
-						this.fetchInterval = fetchInterval
+					let parsedInterval = parseInt(ev.payload.settings.fetch_interval)
+					if (parsedInterval < 1000 && parsedInterval > 0) {
+						fetchInterval = 1000
+					} else if (parsedInterval >= 1000) {
+						fetchInterval = parsedInterval
 					}
 				} catch (error) {
 					streamDeck.logger.warn("Failed to parse Int,", error)
 				}
 
-				this.timer = setInterval(async () => {
+				this.fetchIntervals.set(context, fetchInterval);
+				this.states.set(context, 0);
+
+				const timer = setInterval(async () => {
 					if (ev.action.isKey()) {
-						this.state = await this.checkStreaming(ev.payload.settings) === true ? 1 : 0;
-						ev.action.setState(this.state);
+						const state = await this.checkStreaming(ev.payload.settings) === true ? 1 : 0;
+						this.states.set(context, state);
+						ev.action.setState(state);
 					}
-				}, this.fetchInterval);
+				}, fetchInterval);
+
+				this.timers.set(context, timer);
 			}
 		}
 	}
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<SoopCheckerSettings>): Promise<void> | void {
-		let newTimeout = this.fetchInterval
-		try {
-			newTimeout = this.safeParseInt(ev.payload.settings.fetch_interval)
-		} catch (error) {
+		const context = ev.action.id;
+		const currentInterval = this.fetchIntervals.get(context) || 5000;
 
+		let newInterval = currentInterval;
+		try {
+			newInterval = this.safeParseInt(ev.payload.settings.fetch_interval);
+		} catch (error) {
+			// Keep current interval
 		}
 
-		if (newTimeout !== this.fetchInterval) {
-			clearInterval(this.timer);
-			this.timer = undefined;
+		if (newInterval !== currentInterval) {
+			const timer = this.timers.get(context);
+			if (timer) {
+				clearInterval(timer);
+				this.timers.delete(context);
+			}
 			this.registerSchedule(ev);
 		}
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<SoopCheckerSettings>): Promise<void> | void {
-		clearInterval(this.timer);
-		this.timer = undefined;
+		const context = ev.action.id;
+		const timer = this.timers.get(context);
+		if (timer) {
+			clearInterval(timer);
+			this.timers.delete(context);
+		}
+		this.states.delete(context);
+		this.fetchIntervals.delete(context);
 	}
 
 	/**
@@ -75,13 +96,17 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 	 * settings using `setSettings` and `getSettings`.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<SoopCheckerSettings>): Promise<void> {
-		ev.action.setState(this.state)
-		const streamerId = ev.payload.settings.streamer_id
+		const context = ev.action.id;
+		const state = this.states.get(context) || 0;
+		ev.action.setState(state);
+		const streamerId = ev.payload.settings.streamer_id;
 		streamDeck.system.openUrl("https://play.sooplive.co.kr/" + streamerId);
 	}
 
 	override async onKeyUp(ev: KeyUpEvent<SoopCheckerSettings>): Promise<void> {
-		ev.action.setState(this.state)
+		const context = ev.action.id;
+		const state = this.states.get(context) || 0;
+		ev.action.setState(state);
 	}
 
 	private async checkStreaming(setting: SoopCheckerSettings): Promise<boolean> {
@@ -111,7 +136,9 @@ export class StreamChecker extends SingletonAction<SoopCheckerSettings> {
 				return false;  // 방송 중 아님
 			} else if (result.CHANNEL.RESULT === 1) {
 				return true;  // 방송 중
-			} else {
+			} else if (result.CHANNEL.RESULT === -6) {
+				return true; // Streaming. But member-only or adult-only
+			}else {
 				return false;  // 결과를 알 수 없음
 			}
 		} catch (error) {
